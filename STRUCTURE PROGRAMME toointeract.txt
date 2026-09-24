@@ -1,0 +1,519 @@
+ STRUCTURE & ARCHITECTURE
+Arborescence des fichiers
+src/
++-- App.jsx                          ? Routeur principal + auth providers
++-- index.css                        ? Design tokens (couleurs, polices HSL)
++-- tailwind.config.js               ? Mapping Tailwind ? tokens
+¦
++-- lib/
+¦   +-- AuthContext.jsx              ? Provider auth global (token, user, erreurs)
+¦   +-- i18n.jsx                     ? Traductions FR/AR/EN + LanguageProvider
+¦   +-- format.js                     ? formatDT() - précision 12 décimales
+¦   +-- app-params.js                ? Config app (appId, token)
+¦   +-- query-client.js              ? TanStack Query client
+¦   +-- authReturnTo.js              ? Gestion redirect post-auth
+¦   +-- utils.js                     ? cn() utility (clsx + tailwind-merge)
+¦
++-- api/
+¦   +-- base44Client.js              ? SDK Base44 pré-initialisé
+¦
++-- components/
+¦   +-- layout/
+¦   ¦   +-- AppLayout.jsx            ? Layout authentifié (sidebar + outlet)
+¦   ¦   +-- Sidebar.jsx              ? Navigation par rôle (citizen/entrepreneur/merchant/admin)
+¦   ¦   +-- RoleRouter.jsx           ? Router de rôle (pending/blocked/consent ? AppLayout)
+¦   +-- shared/
+¦   ¦   +-- RoleHome.jsx             ? Redirige vers le dashboard selon le rôle
+¦   ¦   +-- Logo.jsx                 ? Logo Eye+QR (image distante)
+¦   ¦   +-- MenuLogo.jsx             ? Wordmark "Interacty" (image distante)
+¦   ¦   +-- LanguageSwitcher.jsx     ? Boutons FR/AR/EN
+¦   ¦   +-- StatCard.jsx             ? Carte statistique (titre, valeur, icône, trend)
+¦   ¦   +-- VoucherScanner.jsx       ? Scanner QR caméra (BarcodeDetector API)
+¦   ¦   +-- QRCodeCard.jsx           ? Génération QR code (qrcode.react)
+¦   ¦   +-- CampaignWorkflow.jsx     ? Workflow 9 étapes d'approbation campagne
+¦   ¦   +-- RoleOnboarding.jsx        ? Guide d'accueil par rôle (ROLE_GUIDES)
+¦   ¦   +-- ProgramConsent.jsx       ? Consentement unique aux règles P-interact
+¦   ¦   +-- PendingBanner.jsx        ? Banner "compte en attente"
+¦   +-- auth/
+¦   ¦   +-- PathwaySelection.jsx     ? Choix du rôle (citizen/entrepreneur/merchant)
+¦   ¦   +-- RegisterOtpStep.jsx     ? Étape OTP vérification email
+¦   +-- AuthLayout.jsx               ? Layout pages auth (dual logo + glow)
+¦   +-- GoogleIcon.jsx               ? Icône Google SVG
+¦   +-- ProtectedRoute.jsx           ? Guard d'auth (Outlet si authentifié)
+¦   +-- UserNotRegisteredError.jsx   ? Page erreur "non inscrit"
+¦
++-- pages/
+¦   +-- Welcome.jsx                  ? Landing page publique (/welcome)
+¦   +-- Login.jsx                    ? Connexion email + Google
+¦   +-- Register.jsx                 ? Inscription multi-rôle + OTP
+¦   +-- ForgotPassword.jsx           ? Demande reset password
+¦   +-- ResetPassword.jsx            ? Reset password (?token=)
+¦   +-- PendingValidation.jsx        ? Page attente validation admin
+¦   +-- UserGuidePage.jsx            ? Guide d'usage par rôle (/guide)
+¦   +-- PageNotFound.jsx             ? 404
+¦   +-- citizen/
+¦   ¦   +-- CitizenDashboard.jsx     ? Dashboard citoyen (stats + campagnes)
+¦   ¦   +-- WatchEarn.jsx            ? Watch-to-Earn (vidéo + PoW + gains)
+¦   ¦   +-- WalletPage.jsx           ? Porte-feuilles segmentés + extraction bons
+¦   ¦   +-- CitizenVouchersPage.jsx  ? Bons extraits (QR + barcode)
+¦   +-- entrepreneur/
+¦   ¦   +-- EntrepreneurDashboard.jsx ? Dashboard annonceur (stats + bons retournés)
+¦   ¦   +-- CampaignsPage.jsx        ? Création/gestion campagnes
+¦   ¦   +-- AnalyticsPage.jsx        ? Analytics (bar/pie charts)
+¦   ¦   +-- QRCodesPage.jsx          ? QR codes dynamiques (Pool A)
+¦   ¦   +-- VouchersPage.jsx        ? Config Bons Cadeaux (25/50/100/200 DT)
+¦   +-- merchant/
+¦   ¦   +-- MerchantDashboard.jsx    ? Dashboard commerçant (validation bons + paiements)
+¦   ¦   +-- AffiliationPage.jsx      ? Code/QR affiliation + citoyens affiliés
+¦   ¦   +-- MerchantVouchersPage.jsx ? Bons cumulés + transfert (direct/grossiste)
+¦   +-- admin/
+¦       +-- AdminDashboard.jsx       ? Centre de contrôle (revenus, pools, alertes)
+¦       +-- PoolsPage.jsx            ? Distribution pools 40/60 par pack
+¦       +-- InteractionCategoriesPage.jsx ? Config 4 packs (Éclat/Expansion/Prestige/Absolu)
+¦       +-- ModerationPage.jsx       ? Modération campagnes (workflow 9 étapes)
+¦       +-- UsersPage.jsx            ? Gestion utilisateurs (valider/rejeter/sanctionner/bloquer)
+¦       +-- MonitoringPage.jsx       ? Monitoring sécurité (latence, menaces)
+¦       +-- AffiliationPage.jsx      ? Vue globale affiliation (commerçants ? citoyens)
+¦       +-- AgentChatPage.jsx        ? Assistant IA (chat)
+¦       +-- UsageGuide.jsx           ? Guide admin complet (10 sections)
+¦       +-- DataImportPage.jsx       ? Import CSV ? entités Base44
+¦
++-- components/ui/                    ? shadcn/ui (40+ composants Radix)
+¦   +-- button.jsx, card.jsx, badge.jsx, input.jsx, label.jsx
+¦   +-- dialog.jsx, select.jsx, tabs.jsx, table.jsx, switch.jsx
+¦   +-- progress.jsx, textarea.jsx, scroll-area.jsx, skeleton.jsx
+¦   +-- toast.jsx, toaster.jsx, use-toast.jsx
+¦   +-- ... (accordion, alert, avatar, calendar, chart, checkbox, etc.)
+¦
+base44/
++-- entities/                        ? 8 schémas JSON (Campaign, Voucher, Wallet, etc.)
++-- agents/pinteract_assistant.jsonc ? Agent IA assistant
++-- config.jsonc                     ? Config app
+Architecture d'authentification
+AuthProvider (src/lib/AuthContext.jsx)
+  +-- checkAppState() ? vérifie public settings + token
+  +-- checkUserAuth() ? base44.auth.me()
+  +-- États: isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated
+  +-- Méthodes: logout(), navigateToLogin()
+
+ProtectedRoute (src/components/ProtectedRoute.jsx)
+  +-- isLoadingAuth || !authChecked ? spinner
+  +-- authError.user_not_registered ? UserNotRegisteredError
+  +-- authError autre ? unauthenticatedElement (Navigate /login)
+  +-- isAuthenticated ? <Outlet />
+
+RoleRouter (src/components/layout/RoleRouter.jsx)
+  +-- pending_validation + (entrepreneur|merchant) ? PendingValidation
+  +-- rejected ? page "Compte refusé"
+  +-- blocked ? page "Compte bloqué"
+  +-- !program_consent_accepted ? ProgramConsent
+  +-- sinon ? <AppLayout userRole={effectiveRole} />
+Routage (src/App.jsx)
+Routes publiques:
+  /welcome          ? Welcome (landing page)
+  /login            ? Login
+  /register         ? Register (multi-rôle + OTP)
+  /forgot-password  ? ForgotPassword
+  /reset-password   ? ResetPassword
+
+Routes protégées (ProtectedRoute ? RoleRouter ? AppLayout):
+  Citoyen:     /, /watch, /wallet, /my-vouchers, /guide
+  Annonceur:   /entrepreneur, /campaigns, /analytics, /qrcodes, /vouchers
+  Commerçant:  /merchant, /merchant/affiliation, /merchant/vouchers
+  Admin:       /admin, /admin/pools, /admin/categories, /admin/moderation,
+               /admin/users, /admin/monitoring, /admin/affiliation,
+               /admin/agent, /admin/usage-guide, /admin/import
+
+  * ? PageNotFound
+Design System (src/index.css + tailwind.config.js)
+Tokens HSL:
+  --primary: 250 80% 60%     (violet/indigo)
+  --accent: 168 76% 42%      (teal/émeraude)
+  --background: 220 20% 97%  (clair) / 228 25% 8% (sombre)
+  --destructive: 0 84% 60%
+  --radius: 0.75rem
+
+Polices:
+  --font-heading: 'Space Grotesk'
+  --font-body: 'Inter'
+  --font-display: 'Space Grotesk'
+
+Dark mode: classe .dark (tokens overrides)
+Internationalisation (src/lib/i18n.jsx)
+3 langues: fr (défaut), ar (RTL), en
+LanguageProvider ? localStorage('interacty_lang')
+t(key) ? dictionnaire de ~80 clés (nav.*, dash.*, watch.*, welcome.*)
+isRTL ? document.documentElement.dir = 'rtl' pour l'arabe
+Entités Base44 (base44/entities/)
+EntitéRôleRLSCampaignCampagnes publicitairesCréation: entrepreneur only. Lecture: admin + créateur + status=activeInteractionHistorique visionnageCréation: user_id = self. Lecture: admin + self + status=completedVoucherBons CadeauxLecture: admin + entrepreneur + citizen + merchantWalletPorte-feuillesLecture/écriture: propriétaire + adminInteractionCategory4 Packs (Éclat/Expansion/Prestige/Absolu)Admin only (CRUD complet)PoolConfigConfig pools A/BAdmin onlyReferralCodeCodes d'affiliationLecture: public (true). Écriture: propriétaire + adminReferralLiens affiliation commerçant?citoyenCréation: referred_id = self
+2?? LOGIQUE MÉTIER & CALCULS
+Système de gains - Moteur Hybride 40/60
+4 Packs d'interaction (InteractionCategoriesPage.jsx + PoolsPage.jsx) :
+PackBudget G (DT)Pool A (40%)Pool B (60%)Coeff. PBInteractions ciblesÉclat ?5 0002 0003 0000,000349%2 200 000Expansion ??10 0004 0006 0000,000174%4 200 000Prestige ??15 0006 0009 0000,000116%6 500 000Absolu ??20 0008 00012 0000,000087%8 500 000Pool A - Physique (40% de G) :
+* Gain FIXE : 0,1 DT par interaction
+* Support : écrans DOOH + scan QR Code
+* Interactions max = poolAMass / 0.1 (ex: 8000 / 0.1 = 80 000)
+Pool B - Digital (60% de G) :
+* Gain DÉGRESSIF (Asymptotic Decay Model)
+* Algorithme : Gain B = Solde restant × PB
+* Ex: Interaction 1 = 12 000 × 0,000087% = 0,01044 DT
+* Le gain diminue progressivement, jamais zéro abrupt
+Fonction de calcul (PoolsPage.jsx, InteractionCategoriesPage.jsx) :
+function computePools(G, pbCoeff) {
+  const poolAMass = G * 0.4;                              // 40% de G
+  const poolBMass = G * 0.6;                              // 60% de G
+  const poolAInteractions = Math.round(poolAMass / 0.1);  // 0,1 DT fixe
+  const firstGainB = poolBMass * (pbCoeff / 100);         // 1er gain dégressif
+  return { poolAMass, poolBMass, poolAInteractions, firstGainB };
+}
+Types de campagnes
+Phygital (CampaignsPage.jsx) :
+* Écrans physiques (DOOH) + plateforme web
+* Budget G divisé : 40% Pool A (fixe 0,1 DT) + 60% Pool B (dégressif)
+* pool_type = 'both'
+* QR code activable
+Digital (CampaignsPage.jsx) :
+* Plateforme web uniquement
+* 100% du budget G en Pool B (dégressif)
+* pool_type = 'pool_b', pool_a_gain_dt = 0
+* Pas de QR code ni d'écrans physiques
+Calcul du gain à la collecte (WatchEarn.jsx - handleCollect)
+// 1. Récupérer la catégorie d'interaction de la campagne
+const cat = await InteractionCategory.filter({ id: campaign.interaction_category_id });
+
+// 2. Coefficient PB du pack (fallback si non configuré)
+const pbCoeff = (cat.pb_coefficient || PACK_PB_FALLBACK[cat.code]) / 100;
+
+// 3. Masse Pool B selon le type de campagne
+const isDigital = campaign.campaign_type === 'digital';
+const poolBMass = isDigital
+  ? campaign.budget_dt                    // Digital: 100% du budget
+  : campaign.budget_dt * 0.6;            // Phygital: 60% du budget
+
+// 4. Somme des gains bruts déjà distribués
+const existing = await Interaction.filter({ campaign_id, status: 'completed' });
+const previousGrossSum = existing.reduce((s, i) => s + i.gain_earned_dt / 0.95, 0);
+
+// 5. Gain dégressif = solde restant × PB
+const remainingMass = Math.max(0, poolBMass - previousGrossSum);
+const grossGain = remainingMass * pbCoeff;
+
+// 6. Net = brut - 5% commission plateforme
+const netGain = grossGain - grossGain * 0.05;
+Créditation des gains (WatchEarn.jsx - createInteraction)
+// Citoyen reçoit le gain NET
+wallet.balance_dt += netGain;
+wallet.total_earned_dt += netGain;
+wallet.total_interactions += 1;
+wallet.platform_commission_dt += grossGain * 0.05;  // commission tracée
+
+// Commerçant affilié reçoit 5% du gain net du citoyen
+const referrals = await Referral.filter({ referred_id: user.id, status: 'active' });
+if (referrals.length > 0) {
+  const merchantGrossGain = netGain * 0.05;
+  const affiliationCommission = merchantGrossGain * 0.05;  // 5% plateforme
+  const merchantNetGain = merchantGrossGain - affiliationCommission;
+
+  merchantWallet.balance_dt += merchantNetGain;
+  merchantWallet.affiliation_earnings_dt += merchantGrossGain;
+  merchantWallet.platform_commission_dt += affiliationCommission;
+}
+Proof-of-Watch (WatchEarn.jsx)
+// Détection de changement d'onglet (visibilitychange)
+document.addEventListener('visibilitychange', handleVisibility);
+// ? Si document.hidden pendant le visionnage:
+//   - attentionActive = false
+//   - tabSwitches++
+//   - vidéo pausée + timer arrêté
+
+// Score d'attention
+attention_score = Math.max(0, 100 - tabSwitches * 20);
+
+// Validation PoW
+pow_validated = tabSwitches <= 1;
+// Si > 3 tab switches ? interaction "flagged" (fraude)
+Système de Bons Cadeaux (Voucher entity)
+Valeurs fixes : 25, 50, 100, 200 DT - pas d'expiration
+Circuit complet :
+1. Annonceur configure les valeurs (VouchersPage.jsx)
+   ? Voucher.create({ status: 'issued', entrepreneur_id, value_dt })
+
+2. Citoyen extrait un bon (WalletPage.jsx)
+   ? real_value_dt = value_dt × 0.9  (-10% commerçant)
+   ? remaining_value_dt = value_dt × 0.9
+   ? status: 'extracted', face_match_verified: true
+
+3. Commerçant valide le bon (MerchantDashboard.jsx)
+   ? commission = value_dt × 0.10  (10% pour le commerçant)
+   ? status: 'used', merchant_id set
+   ? wallet.voucher_commission_dt += commission
+
+4. Commerçant transfère à l'annonceur (MerchantVouchersPage.jsx)
+   ? Direct: entrepreneurAmount = remaining_value_dt
+   ? Grossiste: wholesalerDeduction = remaining × 0.1
+                entrepreneurAmount = remaining × 0.9
+   ? status: 'returned', returned_to_entrepreneur: true
+   ? entrepreneurWallet.returned_vouchers_value_dt += entrepreneurAmount
+Porte-feuilles segmentés (WalletPage.jsx)
+// Regroupement des gains par annonceur
+interactions.forEach((i) => {
+  advertiserMap[i.advertiser_id].earned += i.gain_earned_dt;
+});
+
+// Déduction des bons déjà extraits
+vouchers.forEach((v) => {
+  if (advertiserMap[v.entrepreneur_id]) {
+    advertiserMap[v.entrepreneur_id].earned -= v.value_dt;
+  }
+});
+
+// Solde disponible par segment = max(0, earned - vouchers extraits)
+// Notification "Bon Cadeau déclenché" quand un segment atteint un seuil
+Structure des commissions (AdminDashboard.jsx)
+CommissionTauxSourceDestinationMarkup Interacty15%Budget campagne GRevenu plateformeCommission visionnage5%Gain brut citoyenplatform_commission_dtCommission affiliation5%Gain affiliation commerçantplatform_commission_dtCommission bons5%Commission bons commerçantRevenu plateformeCommission commerçant (gains)5%Gain net citoyen affiliéaffiliation_earnings_dtCommission commerçant (bons)10%Valeur bon acceptévoucher_commission_dtDéduction grossiste10%Valeur restante bonwholesaler_deduction_dtWorkflow Campagne - 9 étapes (CampaignWorkflow.jsx)
+Étape 1: Approuver le type (Phygital/Digital)
+Étape 2: Pack & Honoraires (screen_owner_fees + markup_percent)
+Étape 3: Contrôle vidéo (MP4 / 1920×1080 / 10s)
+Étape 4: Tarification complète (budget + protocole 50/50)
+Étape 5: 1er paiement (50%) ? active la campagne
+         ? qr_deployed: true, link_deployed: true, status: 'active'
+         ? second_payment_due_date = mi-campagne
+Étape 7: Campagne active (QR & lien déployés)
+Étape 8: 2ème tranche (50%) ? confirmer OU arrêter diffusion (pause)
+Étape 9: Campagne confirmée (diffusion complète)
+Inscription & Affiliation (Register.jsx)
+1. Sélection du rôle (PathwaySelection)
+   - Citizen: needsAdminValidation = false (accès immédiat)
+   - Entrepreneur/Merchant: needsAdminValidation = true (pending)
+
+2. Citizen: validation du code d'affiliation
+   ? ReferralCode.filter({ code: affiliationCode })
+   ? Si valide: merchantAffiliator = { id: code.owner_id }
+
+3. Après OTP vérification:
+   ? User.update({ requested_role, first_name, last_name, phone,
+                    company_name, affiliation_code (merchant only),
+                    affiliated_by (citizen only),
+                    account_status: 'pending_validation' | 'active' })
+
+4. Merchant: génération code affiliation (ex: MAR1234)
+   ? ReferralCode.create({ code, owner_id, owner_role: 'merchant' })
+
+5. Citizen: création lien Referral
+   ? Referral.create({ referrer_id: merchantId, referred_id: citizenId,
+                       referral_code, status: 'active' })
+Validation admin (UsersPage.jsx)
+// Approbation: active le compte + set role = requested_role
+approveUser ? User.update({ account_status: 'active', role: targetRole })
+// + génère affiliation_code si merchant et non déjà présent
+// + crée ReferralCode si inexistant
+
+// Sanction: 3 notifications email avant blocage
+sanctionUser ? User.update({ sanction_count: count++ })
+  ? SendEmail notification
+  ? Si count >= 3: blockUser disponible
+
+// Blocage: account_status = 'blocked' ? RoleRouter affiche page "Compte bloqué"
+Import de données (DataImportPage.jsx)
+1. Upload fichier (CSV/Excel/JSON) ? UploadFile ? file_url
+2. Récupération schéma entité ? base44.entities[Entity].schema()
+3. Extraction structurée ? ExtractDataFromUploadedFile({ file_url, json_schema })
+4. Bulk create ? base44.entities[Entity].bulkCreate(records)
+
+Entités importables: Campaign, Voucher, Wallet, Interaction,
+  ReferralCode, Referral, InteractionCategory, PoolConfig
+
+3?? PAGES & INTERFACES UI
+Pages publiques (auth)
+Welcome (/welcome) :
+* Header sticky avec dual logo (Logo + MenuLogo) + LanguageSwitcher + bouton Login
+* Hero : tagline + titre "Regardez, interagissez, gagnez"
+* 2 cartes : Connexion + Mot de passe oublié
+* Info inscription citoyen (QR affiliation obligatoire)
+* Section pro : cartes Annonceur + Commerçant (liens /register?role=)
+* 3 features : Scan QR, Gains DT, Face Match
+* Footer copyright
+Login (/login) :
+* AuthLayout (dual logo + glow effect sur MenuLogo)
+* Bouton Google (GoogleIcon)
+* Formulaire email + password (PasswordInput)
+* Lien "Mot de passe oublié ?" + "Créer un compte" + retour Welcome
+Register (/register) :
+* 3 étapes : selection ? form ? otp
+* PathwaySelection : 3 cartes (Citoyen, Annonceur, Commerçant)
+* Form adaptatif selon le rôle :
+* Citizen : téléphone + code d'affiliation (validé via ReferralCode)
+* Entrepreneur : entreprise + téléphone entreprise
+* Merchant : commerce + téléphone mobile
+* OTP step (RegisterOtpStep) : 6 chiffres + resend
+* Après vérification : dual update (User.update + auth.updateMe) + création ReferralCode/Referral
+AuthLayout :
+* Dual branding centré : Logo (Eye+QR) + MenuLogo (wordmark) avec glow blur-lg bg-primary/30
+* Titre + sous-titre dynamiques
+* Card avec formulaire
+* Footer optionnel
+Dashboard Citoyen
+CitizenDashboard (/) :
+* Welcome "Bienvenue, {name} ??"
+* 4 StatCards : Solde, Total Gagné, Interactions, Bons
+* Campagnes disponibles (3 cartes avec thumbnail + gain)
+* Activité récente (5 dernières interactions avec score attention)
+WatchEarn (/watch) :
+* Grille de campagnes disponibles (exclut déjà regardées)
+* Carte campagne : thumbnail, badge gain net, durée, bouton "Regarder"
+* Modal de visionnage :
+* Zone vidéo (ou fallback timer si pas de vidéo)
+* Indicateur attention (Eye vert / EyeOff rouge)
+* Badge Proof-of-Watch
+* Barre de progression
+* Alerte tab switches
+* Phase complétée :
+* Choix de réaction (6 emojis animés)
+* Affichage gain net + commission 5%
+* Bouton "Collecter mes gains"
+* Phase collectée : confirmation + gain réel
+WalletPage (/wallet) :
+* Carte solde total (gradient primary?accent)
+* 2 sous-cartes : Total Gagné + Nombre d'annonceurs
+* Notification "Bon Cadeau déclenché !" (quand seuil atteint)
+* Grille de porte-feuilles segmentés par annonceur :
+* Nom + solde + total gagné
+* Boutons Bons Cadeaux disponibles (valeurs = solde)
+* Seuil minimum si pas encore atteint
+* Dialog extraction : sélection valeur + validation Face Match (simulée 1.5s)
+* Historique des gains (30 dernières transactions)
+CitizenVouchersPage (/my-vouchers) :
+* 3 StatCards : Bons actifs, Valeur réelle, Bons utilisés
+* Cartes bons actifs :
+* Titre + code + badge "Extrait"
+* Notification valeur réelle (-10% commerçant)
+* Dialog : QR code + barcode visuel + code + valeur
+* Historique bons utilisés (opacité 60%)
+Dashboard Annonceur
+EntrepreneurDashboard (/entrepreneur) :
+* Welcome "Bienvenue, {displayName}" + "Nom du titulaire du compte"
+* Bouton "Nouvelle Campagne"
+* 4 StatCards : Campagnes actives, Interactions, Budget dépensé, Taux complétion
+* Carte "Porte-feuille Bons Retournés" (gradient accent) + bouton "Payer une Campagne"
+* Chart performance hebdomadaire (AreaChart recharts)
+* Liste campagnes récentes (5) avec statut coloré
+CampaignsPage (/campaigns) :
+* Bouton "Créer" ? Dialog création
+* Formulaire création :
+* Type de campagne (Phygital/Digital) - cartes cliquables
+* Titre + Marque + Description
+* Catégorie d'interaction (grille de packs avec budget)
+* Aperçu répartition 40/60 (phygital) ou 100% Pool B (digital)
+* Budget (auto-rempli depuis le pack, readonly)
+* Upload vidéo MP4 (UploadFile integration)
+* Dates début/fin
+* Pool distribution + QR code (phygital only)
+* Liste campagnes : thumbnail + titre + badges (type, statut, étape workflow) + bouton delete
+AnalyticsPage (/analytics) :
+* 4 StatCards : Interactions totales, Score attention, Taux complétion, Campagnes
+* BarChart interactions par campagne
+* PieChart répartition par catégorie
+* Tableau situation des campagnes (interactions, budget, complétion, attention, statut)
+QRCodesPage (/qrcodes) :
+* Grille de campagnes avec QR code activé
+* QR visuel + URL copiable + bouton ouvrir
+* Badge "Pool A"
+VouchersPage (/vouchers) :
+* Configuration valeurs (25/50/100/200 DT) - cartes toggle activé/désactivé
+* 4 StatCards : Valeurs configurées, Bons extraits, Bons utilisés, Valeur distribuée
+* Liste bons extraits par citoyens (30 max)
+Dashboard Commerçant
+MerchantDashboard (/merchant) :
+* Welcome "Bienvenue, {displayName}" + "Nom du titulaire du compte"
+* Carte profil (avatar initiale + email + badge validé/en attente)
+* Carte "Porte-feuille Gains" (gradient teal) :
+* Solde + bouton "Paiement"
+* 2 sous-cartes : Affiliation Brut (5%) + Commission Bons (10%)
+* Carte "Validation des Bons Cadeaux" :
+* Bouton "Scanner le QR Code" (ouvre VoucherScanner)
+* Saisie manuelle (Input + bouton Valider)
+* 3 StatCards : Bons validés, Valeur totale, Commission
+* Lien "Bons d'Achats Cumulés" (si bons utilisés)
+* Liste bons validés
+* Dialog paiement : bénéficiaire + montant ? débit wallet
+AffiliationPage (/merchant/affiliation) :
+* Carte code d'affiliation (grand code mono + bouton copier)
+* Lien d'affiliation copiable (/register?ref__=CODE)
+* QR code d'affiliation (QRCodeCard)
+* 2 StatCards : Citoyens affiliés + Commission 5%
+* Guide "Comment ça marche" (4 étapes)
+* Liste citoyens affiliés
+MerchantVouchersPage (/merchant/vouchers) :
+* Bons cumulés segmentés par annonceur
+* Chaque segment : nom + total cumulé + liste bons
+* Bouton "Afficher Bon" (QR) + "Transférer"
+* Dialog transfert : choix Direct ou Grossiste (-10%)
+* Mutation : update voucher status?returned + credit entrepreneur wallet
+Dashboard Admin
+AdminDashboard (/admin) :
+* Header "Centre de Contrôle" + lien externe Welcome
+* 5 StatCards : Utilisateurs, Campagnes actives, En attente, Distribué (net), Commission Interacty
+* Carte "Revenus du Programme" (5 colonnes) :
+* Markup (15%), Commission visionnage (5%), Commission affiliation (5%), Commission bons (5%), Total
+* AreaChart activité système 24h (interactions + fraude)
+* Carte "Soldes des Pools 40/60" (barres A/B par masse G)
+* 2 cartes : Alertes Fraude + Campagnes en Révision
+PoolsPage (/admin/pools) :
+* Bannière info moteur hybride 40/60
+* 2 cartes types de campagnes (Phygital/Digital) avec barres visuelles
+* Grille 4 packs : header, barre 40/60, détails Pool A (masse, gain, interactions), détails Pool B (masse, PB, 1er gain)
+* Simulation Digital (Absolu 100% Pool B)
+* Simulation Phygital (Absolu 40/60)
+InteractionCategoriesPage (/admin/categories) :
+* Bannière moteur 40/60 + tableau coefficients PB
+* 2 cartes types de campagnes
+* Grille 4 packs avec bouton "Configurer le prix"
+* Simulation technique Pack Absolu
+* Dialog édition : budget G modifiable + description + aperçu 40/60 calculé + switch actif
+ModerationPage (/admin/moderation) :
+* 3 onglets : En révision, 2ème tranche, Fraude
+* Tab "En révision" : campagnes pending_review avec CampaignWorkflow (9 étapes)
+* Tab "2ème tranche" : campagnes actives avec échéance due ? workflow étape 8
+* Tab "Fraude" : interactions flaggées (tab switches, score)
+UsersPage (/admin/users) :
+* Filtres : Tous / En attente / Bloqués
+* Tableau : avatar + nom + email + téléphone + rôle (badge coloré) + statut + date + actions
+* Actions :
+* Pending : Valider / Refuser
+* Active : Sanctionner (badge count/3) + Bloquer (si =3)
+* Blocked : Réactiver
+* Bouton "Valider tous" (bulk)
+MonitoringPage (/admin/monitoring) :
+* 4 StatCards : PoW validés, Échecs PoW, Score moyen, Interactions/h
+* LineChart latence système
+* Carte menaces détectées (Bot, Tab Switching, Multi Accounts, VPN)
+AffiliationPage (/admin/affiliation) :
+* Header gradient + stats : Commerçants, Citoyens affiliés, Non affiliés
+* Liste commerçants avec code d'affiliation (copiable) + badge citoyens
+* Sous chaque commerçant : grille de citoyens affiliés (avatar, nom, email, statut)
+UsageGuide (/admin/usage-guide) :
+* 10 sections accordéon : 0. Configuration Super Admin
+1. Scénarios de test (Annonceur, Commerçant, Citoyen)
+2. Architecture 4 espaces
+3. Système d'affiliation
+4. Les 4 packs
+5. Moteur hybride 40/60
+6. Structure des commissions
+7. Workflow campagne 9 étapes
+8. Proof-of-Watch & anti-fraude
+9. Checklist de lancement
+10. Assistant IA
+DataImportPage (/admin/import) :
+* Sélection type d'entité (8 boutons)
+* Zone upload CSV/Excel/JSON (drag & drop style)
+* Bouton import ? Upload + Extract + BulkCreate
+* Résultat (succès/erreur)
+* Carte info synchronisation MySQL
+AgentChatPage (/admin/agent) :
+* Interface chat avec l'agent IA pinteract_assistant
+Composants partagés clés
+VoucherScanner : utilise BarcodeDetector API native + getUserMedia pour scanner QR codes en temps réel. Cadre de scan animé (scan-line CSS). Fallback saisie manuelle si non supporté.
+CampaignWorkflow : stepper horizontal 9 étapes avec icônes. Chaque étape affiche un panneau d'action contextuel (approuver type, saisir honoraires, valider vidéo, confirmer paiements).
+ProgramConsent : modal plein écran avec 5 règles du programme (Watch-to-Earn authentique, affiliation non-pyramidale, bons segmentés, commission 5%, Face Match obligatoire). Acceptation unique via updateMe({ program_consent_accepted: true }).
+RoleOnboarding : guide d'accueil par rôle avec 3 features + 4 étapes. Dismissible. Exporte ROLE_GUIDES réutilisé par UserGuidePage et PendingValidation.
+
